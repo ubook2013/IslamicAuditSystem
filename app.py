@@ -6,64 +6,83 @@ import random
 from faker import Faker
 
 # إعداد الصفحة
-st.set_page_config(page_title="Islamic Audit System", layout="wide")
-fake = Faker()
+st.set_page_config(page_title="نظام التدقيق الشرعي", layout="wide")
+fake = Faker('ar_JO')
 
 # إعداد قاعدة البيانات
-conn = sqlite3.connect("islamic_audit_system.db", check_same_thread=False)
+conn = sqlite3.connect("bank_system.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# إنشاء الجداول
-cursor.execute("CREATE TABLE IF NOT EXISTS Customers (account_number TEXT PRIMARY KEY, full_name TEXT, residence TEXT, gender TEXT, national_id TEXT, branch TEXT, birth_date TEXT, nationality TEXT, phone TEXT)")
-cursor.execute("CREATE TABLE IF NOT EXISTS Islamic_Contracts (contract_number TEXT PRIMARY KEY, account_number TEXT, finance_type TEXT, supplier_name TEXT, contract_amount REAL, contract_status TEXT, is_fraud INTEGER, suspicion_reason TEXT)")
+# إنشاء الجداول بالهيكلية المطلوبة
+cursor.execute("""CREATE TABLE IF NOT EXISTS Customers (
+    full_name TEXT, 
+    national_id TEXT PRIMARY KEY, 
+    account_number TEXT UNIQUE, 
+    birth_date TEXT, 
+    gender TEXT, 
+    account_type TEXT, 
+    account_balance REAL)""")
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS Contracts (
+    contract_number TEXT PRIMARY KEY, 
+    account_number TEXT, 
+    finance_type TEXT, 
+    contract_amount REAL, 
+    status TEXT,
+    is_fraud INTEGER,
+    reason TEXT)""")
 conn.commit()
 
-# دالة كشف الاحتيال
-def detect_fraud(finance_type, amount, supplier):
-    if amount > 500000: return 1, "High Amount - Risk of Money Laundering"
-    if finance_type == "Murabaha" and supplier == "None": return 1, "Missing Supplier - Sharia Violation"
-    return 0, "Compliant"
+# دالة التفسير المالي والشرعي
+def analyze_contract(f_type, amount):
+    if amount > 500000:
+        return 1, "مخالفة: المبلغ يتجاوز السقف (مخاطر غسيل أموال)."
+    if f_type == "مرابحة" and amount < 1000:
+        return 1, "مخالفة: قيمة المرابحة لا تغطي التكاليف التشغيلية."
+    return 0, "سليم: المعاملة متوافقة مع الضوابط الشرعية."
 
-# تسجيل الدخول
+# الواجهة
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    st.title("🔐 Login")
-    user = st.text_input("Username")
-    pw = st.text_input("Password", type="password")
-    if st.button("Login"):
+    st.title("🔐 تسجيل دخول الموظفين")
+    user = st.text_input("اسم المستخدم")
+    pw = st.text_input("كلمة المرور", type="password")
+    if st.button("دخول"):
         if user == "admin" and pw == "1234":
             st.session_state.logged_in = True
             st.rerun()
 else:
-    st.title("🏦 Islamic Banking Audit System")
-    tab1, tab2 = st.tabs(["📊 Dashboard", "🔍 Search Customer"])
-    
+    st.title("🏦 نظام التدقيق الشرعي البنكي")
+    tab1, tab2 = st.tabs(["📊 البيانات والعملاء", "🔍 بحث تفصيلي"])
+
     with tab1:
-        if st.button("Generate Random Data"):
+        if st.button("توليد عميل وبيانات مالية"):
             acc = str(random.randint(100000, 999999))
-            cursor.execute("INSERT OR IGNORE INTO Customers VALUES (?,?,?,?,?,?,?,?,?)", (acc, fake.name(), "Amman", "Male", "12345", "Main Branch", "1990-01-01", "Jordanian", "0790000000"))
-            f_type = random.choice(["Mudaraba", "Murabaha", "Ijara"])
-            amt = random.uniform(100, 600000)
-            supplier = "Supplier_A" if random.random() > 0.3 else "None"
-            is_fraud, reason = detect_fraud(f_type, amt, supplier)
-            cursor.execute("INSERT OR IGNORE INTO Islamic_Contracts VALUES (?,?,?,?,?,?,?,?)", (str(random.randint(1000000, 9999999)), acc, f_type, supplier, amt, "Fraud" if is_fraud else "Safe", is_fraud, reason))
+            nat_id = str(random.randint(9000000000, 9999999999))
+            # إضافة عميل
+            cursor.execute("INSERT OR IGNORE INTO Customers VALUES (?,?,?,?,?,?,?)", 
+                           (fake.name(), nat_id, acc, "1990-01-01", "ذكر", "توفير", random.uniform(1000, 700000)))
+            # إضافة عقد
+            f_type = random.choice(["مرابحة", "مضاربة", "إجارة"])
+            amt = random.uniform(500, 600000)
+            is_f, res = analyze_contract(f_type, amt)
+            cursor.execute("INSERT OR IGNORE INTO Contracts VALUES (?,?,?,?,?,?,?)", 
+                           (str(random.randint(1000,9999)), acc, f_type, amt, "مشتبه به" if is_f else "سليم", is_f, res))
             conn.commit()
             st.rerun()
-        st.dataframe(pd.read_sql_query("SELECT * FROM Islamic_Contracts", conn), use_container_width=True)
+        st.subheader("قاعدة بيانات العملاء")
+        st.dataframe(pd.read_sql_query("SELECT * FROM Customers", conn), use_container_width=True)
 
     with tab2:
-        st.subheader("🔍 Search Customer")
-        acc_num = st.text_input("Enter Account Number:")
-        if st.button("Search"):
-            query_cust = "SELECT * FROM Customers WHERE account_number = ?"
-            query_cont = "SELECT * FROM Islamic_Contracts WHERE account_number = ?"
-            cust = pd.read_sql_query(query_cust, conn, params=(str(acc_num).strip(),))
-            cont = pd.read_sql_query(query_cont, conn, params=(str(acc_num).strip(),))
-            
+        search = st.text_input("أدخل رقم الحساب:")
+        if st.button("بحث"):
+            cust = pd.read_sql_query("SELECT * FROM Customers WHERE account_number = ?", conn, params=(search.strip(),))
+            cont = pd.read_sql_query("SELECT * FROM Contracts WHERE account_number = ?", conn, params=(search.strip(),))
             if not cust.empty:
-                st.success("Customer Found!")
+                st.subheader("بيانات العميل")
                 st.table(cust)
+                st.subheader("التحليل الشرعي للعقود")
                 st.dataframe(cont)
             else:
-                st.error("Account not found.")
+                st.error("رقم الحساب غير موجود.")
