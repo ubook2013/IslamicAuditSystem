@@ -9,7 +9,7 @@ from faker import Faker
 st.set_page_config(page_title="Islamic Audit System", layout="wide")
 fake = Faker()
 
-# إعداد قاعدة البيانات - ثابتة لا تُمسح عند التحديث
+# إعداد قاعدة البيانات
 conn = sqlite3.connect("islamic_audit_system.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -20,10 +20,8 @@ conn.commit()
 
 # دالة كشف الاحتيال
 def detect_fraud(finance_type, amount, supplier):
-    if amount > 500000:
-        return 1, "High Amount - Risk of Money Laundering"
-    if finance_type == "Murabaha" and supplier == "None":
-        return 1, "Missing Supplier in Murabaha - Sharia Violation"
+    if amount > 500000: return 1, "High Amount - Risk of Money Laundering"
+    if finance_type == "Murabaha" and supplier == "None": return 1, "Missing Supplier - Sharia Violation"
     return 0, "Compliant"
 
 # تسجيل الدخول
@@ -42,30 +40,30 @@ else:
     tab1, tab2 = st.tabs(["📊 Dashboard", "🔍 Search Customer"])
     
     with tab1:
-        st.subheader("Data Management")
         if st.button("Generate Random Data"):
             acc = str(random.randint(100000, 999999))
-            cursor.execute("INSERT OR IGNORE INTO Customers VALUES (?,?,?,?,?,?,?,?,?)", 
-                           (acc, fake.name(), "Amman", "Male", "12345", "Main Branch", "1990-01-01", "Jordanian", "0790000000"))
-            
-            f_types = ["Mudaraba", "Murabaha", "Ijara"]
-            f_type = random.choice(f_types)
+            cursor.execute("INSERT OR IGNORE INTO Customers VALUES (?,?,?,?,?,?,?,?,?)", (acc, fake.name(), "Amman", "Male", "12345", "Main Branch", "1990-01-01", "Jordanian", "0790000000"))
+            f_type = random.choice(["Mudaraba", "Murabaha", "Ijara"])
             amt = random.uniform(100, 600000)
             supplier = "Supplier_A" if random.random() > 0.3 else "None"
             is_fraud, reason = detect_fraud(f_type, amt, supplier)
-            
-            cursor.execute("INSERT OR IGNORE INTO Islamic_Contracts VALUES (?,?,?,?,?,?,?,?)", 
-                           (str(random.randint(1000000, 9999999)), acc, f_type, supplier, amt, "Fraud" if is_fraud else "Safe", is_fraud, reason))
+            cursor.execute("INSERT OR IGNORE INTO Islamic_Contracts VALUES (?,?,?,?,?,?,?,?)", (str(random.randint(1000000, 9999999)), acc, f_type, supplier, amt, "Fraud" if is_fraud else "Safe", is_fraud, reason))
             conn.commit()
             st.rerun()
-            
-        df = pd.read_sql_query("SELECT * FROM Islamic_Contracts", conn)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(pd.read_sql_query("SELECT * FROM Islamic_Contracts", conn), use_container_width=True)
 
     with tab2:
         st.subheader("🔍 Search Customer")
         acc_num = st.text_input("Enter Account Number:")
         if st.button("Search"):
-            acc_num_str = str(acc_num).strip()
-            # جلب البيانات مباشرة من قاعدة البيانات
-            cust = pd.read_sql_query(f"SELECT * FROM Customers WHERE account_number
+            query_cust = "SELECT * FROM Customers WHERE account_number = ?"
+            query_cont = "SELECT * FROM Islamic_Contracts WHERE account_number = ?"
+            cust = pd.read_sql_query(query_cust, conn, params=(str(acc_num).strip(),))
+            cont = pd.read_sql_query(query_cont, conn, params=(str(acc_num).strip(),))
+            
+            if not cust.empty:
+                st.success("Customer Found!")
+                st.table(cust)
+                st.dataframe(cont)
+            else:
+                st.error("Account not found.")
