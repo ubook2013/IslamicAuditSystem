@@ -17,12 +17,15 @@ cursor.execute("CREATE TABLE IF NOT EXISTS Customers (account_number TEXT PRIMAR
 cursor.execute("CREATE TABLE IF NOT EXISTS Islamic_Contracts (contract_number TEXT PRIMARY KEY, account_number TEXT, finance_type TEXT, supplier_name TEXT, contract_amount REAL, contract_status TEXT, is_fraud INTEGER, suspicion_reason TEXT)")
 conn.commit()
 
-# دالة كشف الاحتيال
+# دالة كشف الاحتيال مع التحليل المالي والشرعي
 def detect_fraud(finance_type, amount, supplier):
-    if amount > 500000: return 1, "مبلغ ضخم وغير منطقي"
-    if finance_type == "مرابحة" and not supplier: return 1, "عملية مرابحة بدون مورد"
-    if finance_type == "مضاربة" and amount < 500: return 1, "قيمة مضاربة منخفضة"
-    return 0, "لا يوجد"
+    if amount > 500000:
+        return 1, "مخالفة ضوابط التمويل: المبلغ يتجاوز سقف التمويل المسموح به مما قد يشير إلى مخاطر ائتمانية عالية أو شبهة غسيل أموال."
+    if finance_type == "مرابحة" and not supplier:
+        return 1, "مخالفة شرعية: بيع المرابحة يتطلب تملك السلعة وقبضها من المورد، غياب بيانات المورد يبطل التمليك الشرعي."
+    if finance_type == "مضاربة" and amount < 500:
+        return 1, "مخالفة مالية: انخفاض مبلغ المضاربة عن الحد الأدنى التشغيلي يجعله غير مجدٍ اقتصادياً ويثير الشبهة."
+    return 0, "المعاملة سليمة وتتوافق مع الضوابط المالية والشرعية المعتمدة."
 
 # تسجيل الدخول
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -49,35 +52,4 @@ else:
                 cursor.execute("INSERT OR IGNORE INTO Customers VALUES (?,?,?,?,?,?,?,?,?)", 
                                (acc, fake.name(), fake.city(), "ذكر", "12345", "الفرع الرئيسي", "1990-01-01", "أردني", "0790000000"))
                 
-                f_type = random.choice(["مضاربة", "استصناع", "مرابحة", "مشاركة", "إجارة"])
-                amt = random.uniform(100, 600000)
-                is_fraud, reason = detect_fraud(f_type, amt, "مورد")
-                status = "مشتبه به 🚨" if is_fraud else "سليم ✅"
-                
-                cursor.execute("INSERT OR IGNORE INTO Islamic_Contracts VALUES (?,?,?,?,?,?,?,?)", 
-                               (str(random.randint(1000000, 9999999)), acc, f_type, "مورد", amt, status, is_fraud, reason))
-            
-            conn.commit()
-            st.success("تم إضافة البيانات بنجاح!")
-            st.rerun() # هذا الأمر يضمن ظهور البيانات فوراً
-            
-        df = pd.read_sql_query("SELECT * FROM Islamic_Contracts", conn)
-        if not df.empty:
-            def style_fraud(row):
-                return ['background-color: #ffcccc' if row['is_fraud'] == 1 else '' for _ in row]
-            st.dataframe(df.style.apply(style_fraud, axis=1), use_container_width=True)
-        else:
-            st.info("لا توجد بيانات حالياً. اضغط على الزر أعلاه للبدء.")
-
-    with tab2:
-        acc_num = st.text_input("أدخل رقم الحساب للبحث:")
-        if st.button("بحث"):
-            cust = pd.read_sql_query(f"SELECT * FROM Customers WHERE account_number='{acc_num}'", conn)
-            cont = pd.read_sql_query(f"SELECT * FROM Islamic_Contracts WHERE account_number='{acc_num}'", conn)
-            if not cust.empty:
-                st.subheader("👤 بيانات العميل")
-                st.table(cust)
-                st.subheader("📜 عقود العميل")
-                st.dataframe(cont)
-            else:
-                st.error("رقم الحساب غير موجود")
+                f_type = random.choice(["مضاربة", "استصناع", "مراب
